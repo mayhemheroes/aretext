@@ -7,12 +7,10 @@ Minimalist text editor with vim-compatible key bindings.
 
 [![screencast of aretext](screencast.gif)](https://aretext.org)
 
-Key Features
-------------
-
--	Edit efficiently with nearly 100 supported vim commands.
--	Find files and commands instantly with built-in fuzzy search.
--	Easily customize settings for different programming languages and projects.
+-	Simple and consistent terminal-based UI for distraction-free coding.
+-	Efficient editing with over 100 vim commands.
+-	Intuitive and flexible configuration, per language and project.
+-	Seamless integration with CLI tools (bash, tmux, git, code formatters, compilers, and anything else you use).
 
 *Aretext key bindings are compatible with vim's normal, insert, and visual modes. See [Command Reference](https://aretext.org/docs/command-reference/) for details.*
 
@@ -28,7 +26,7 @@ Project Status
 --------------
 
 -	The user interface is stable, and I am using it as my primary editor.
--	Syntax highlighting is available for [several languages](https://aretext.org/docs/config-reference/#syntax-languages), including Go, Python, Rust, and C.
+-	Syntax highlighting is available for [many languages](https://aretext.org/docs/config-reference/#syntax-languages), including Go, Python, Rust, and C.
 -	Many important vim commands are supported, but there are still many more to add!
 
 See [open milestones](https://github.com/aretext/aretext/milestones?direction=asc&sort=title&state=open) for the current roadmap.
@@ -42,6 +40,17 @@ Developing
 ----------
 
 See [DEVELOPING](DEVELOPING.md) for steps to build, test, and debug aretext.
+
+Blog Posts and Talks
+--------------------
+
+-	[FOSDEM lightning talk (2022)](https://archive.fosdem.org/2022/schedule/event/lt_aretext/), also available [on youtube](https://www.youtube.com/watch?v=NJsWEnM5LcM).
+-	[what's new in aretext 0.5](https://dev-nonsense.com/posts/aretext-0.5-release/)
+-	[aretext 0.6 released!](https://dev-nonsense.com/posts/aretext-0.6-release/)
+-	[aretext 0.7 release, thinking about 1.0](https://dev-nonsense.com/posts/aretext-0.7-release/)
+-	[fuzzy find algorithm](https://dev-nonsense.com/posts/fuzzy-find-algorithm/)
+-	[fuzzing the aretext markdown parser](https://dev-nonsense.com/posts/aretext-markdown-fuzz-test/)
+-	[incremental parsing in go](https://dev-nonsense.com/posts/incremental-parsing-in-go/)
 
 Copyright and License
 ---------------------

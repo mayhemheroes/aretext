@@ -55,26 +55,36 @@ func CursorDown(count uint64) Action {
 	}
 }
 
-func CursorNextWordStart(count uint64) Action {
+func CursorNextLine(count uint64) Action {
 	return func(s *state.EditorState) {
+		state.MoveCursorToLineBelow(s, count)
 		state.MoveCursor(s, func(params state.LocatorParams) uint64 {
-			return locate.NextWordStart(params.TextTree, params.CursorPos, count, false)
+			lineStartPos := locate.PrevLineBoundary(params.TextTree, params.CursorPos)
+			return locate.NextNonWhitespaceOrNewline(params.TextTree, lineStartPos)
 		})
 	}
 }
 
-func CursorPrevWordStart(count uint64) Action {
+func CursorNextWordStart(count uint64, withPunctuation bool) Action {
 	return func(s *state.EditorState) {
 		state.MoveCursor(s, func(params state.LocatorParams) uint64 {
-			return locate.PrevWordStart(params.TextTree, params.CursorPos, count)
+			return locate.NextWordStart(params.TextTree, params.CursorPos, count, withPunctuation, false)
 		})
 	}
 }
 
-func CursorNextWordEnd(count uint64) Action {
+func CursorPrevWordStart(count uint64, withPunctuation bool) Action {
 	return func(s *state.EditorState) {
 		state.MoveCursor(s, func(params state.LocatorParams) uint64 {
-			return locate.NextWordEnd(params.TextTree, params.CursorPos, count)
+			return locate.PrevWordStart(params.TextTree, params.CursorPos, count, withPunctuation)
+		})
+	}
+}
+
+func CursorNextWordEnd(count uint64, withPunctuation bool) Action {
+	return func(s *state.EditorState) {
+		state.MoveCursor(s, func(params state.LocatorParams) uint64 {
+			return locate.NextWordEnd(params.TextTree, params.CursorPos, count, withPunctuation)
 		})
 	}
 }
@@ -115,10 +125,12 @@ func CursorToPrevMatchingChar(char rune, count uint64, includeChar bool) Action 
 	}
 }
 
-func ScrollUp(ctx Context) Action {
+func ScrollUp(ctx Context, half bool) Action {
 	scrollLines := ctx.ScrollLines
 	if scrollLines < 1 {
 		scrollLines = 1
+	} else if half {
+		scrollLines /= 2
 	}
 
 	return func(s *state.EditorState) {
@@ -131,10 +143,12 @@ func ScrollUp(ctx Context) Action {
 	}
 }
 
-func ScrollDown(ctx Context) Action {
+func ScrollDown(ctx Context, half bool) Action {
 	scrollLines := ctx.ScrollLines
 	if scrollLines < 1 {
 		scrollLines = 1
+	} else if half {
+		scrollLines /= 2
 	}
 
 	return func(s *state.EditorState) {
@@ -207,7 +221,7 @@ func CursorMatchingCodeBlockDelimiter(s *state.EditorState) {
 
 func CursorPrevUnmatchedOpenBrace(s *state.EditorState) {
 	state.MoveCursor(s, func(params state.LocatorParams) uint64 {
-		matchPos, hasMatch := locate.PrevUnmatchedOpenBrace(params.TextTree, params.SyntaxParser, params.CursorPos)
+		matchPos, hasMatch := locate.PrevUnmatchedOpenDelimiter(locate.BracePair, params.TextTree, params.SyntaxParser, params.CursorPos)
 		if hasMatch {
 			return matchPos
 		} else {
@@ -218,7 +232,7 @@ func CursorPrevUnmatchedOpenBrace(s *state.EditorState) {
 
 func CursorNextUnmatchedCloseBrace(s *state.EditorState) {
 	state.MoveCursor(s, func(params state.LocatorParams) uint64 {
-		matchPos, hasMatch := locate.NextUnmatchedCloseBrace(params.TextTree, params.SyntaxParser, params.CursorPos)
+		matchPos, hasMatch := locate.NextUnmatchedCloseDelimiter(locate.BracePair, params.TextTree, params.SyntaxParser, params.CursorPos)
 		if hasMatch {
 			return matchPos
 		} else {
@@ -229,7 +243,7 @@ func CursorNextUnmatchedCloseBrace(s *state.EditorState) {
 
 func CursorPrevUnmatchedOpenParen(s *state.EditorState) {
 	state.MoveCursor(s, func(params state.LocatorParams) uint64 {
-		matchPos, hasMatch := locate.PrevUnmatchedOpenParen(params.TextTree, params.SyntaxParser, params.CursorPos)
+		matchPos, hasMatch := locate.PrevUnmatchedOpenDelimiter(locate.ParenPair, params.TextTree, params.SyntaxParser, params.CursorPos)
 		if hasMatch {
 			return matchPos
 		} else {
@@ -240,13 +254,88 @@ func CursorPrevUnmatchedOpenParen(s *state.EditorState) {
 
 func CursorNextUnmatchedCloseParen(s *state.EditorState) {
 	state.MoveCursor(s, func(params state.LocatorParams) uint64 {
-		matchPos, hasMatch := locate.NextUnmatchedCloseParen(params.TextTree, params.SyntaxParser, params.CursorPos)
+		matchPos, hasMatch := locate.NextUnmatchedCloseDelimiter(locate.ParenPair, params.TextTree, params.SyntaxParser, params.CursorPos)
 		if hasMatch {
 			return matchPos
 		} else {
 			return params.CursorPos
 		}
 	})
+}
+
+func DeleteParenBlock(includeParens bool, clipboardPage clipboard.PageId) Action {
+	return func(s *state.EditorState) {
+		state.DeleteRange(s, func(params state.LocatorParams) (uint64, uint64) {
+			return locate.DelimitedBlock(locate.ParenPair, params.TextTree, params.SyntaxParser, includeParens, params.CursorPos)
+		}, clipboardPage)
+	}
+}
+
+func DeleteBraceBlock(includeBraces bool, clipboardPage clipboard.PageId) Action {
+	return func(s *state.EditorState) {
+		state.DeleteRange(s, func(params state.LocatorParams) (uint64, uint64) {
+			return locate.DelimitedBlock(locate.BracePair, params.TextTree, params.SyntaxParser, includeBraces, params.CursorPos)
+		}, clipboardPage)
+	}
+}
+
+func DeleteAngleBlock(includeAngleBrackets bool, clipboardPage clipboard.PageId) Action {
+	return func(s *state.EditorState) {
+		state.DeleteRange(s, func(params state.LocatorParams) (uint64, uint64) {
+			return locate.DelimitedBlock(locate.AnglePair, params.TextTree, params.SyntaxParser, includeAngleBrackets, params.CursorPos)
+		}, clipboardPage)
+	}
+}
+
+func ChangeParenBlock(includeParens bool, clipboardPage clipboard.PageId) Action {
+	return func(s *state.EditorState) {
+		startPos, endPos := state.DeleteRange(s, func(params state.LocatorParams) (uint64, uint64) {
+			return locate.DelimitedBlock(locate.ParenPair, params.TextTree, params.SyntaxParser, includeParens, params.CursorPos)
+		}, clipboardPage)
+
+		if startPos == endPos {
+			// Not within a paren block.
+			return
+		}
+
+		EnterInsertMode(s)
+	}
+}
+
+func ChangeBraceBlock(includeBraces bool, clipboardPage clipboard.PageId) Action {
+	return func(s *state.EditorState) {
+		startPos, endPos := state.DeleteRange(s, func(params state.LocatorParams) (uint64, uint64) {
+			return locate.DelimitedBlock(locate.BracePair, params.TextTree, params.SyntaxParser, includeBraces, params.CursorPos)
+		}, clipboardPage)
+
+		if startPos == endPos {
+			// Not within a brace block.
+			return
+		}
+
+		if !includeBraces {
+			state.InsertNewline(s)
+			state.InsertNewline(s)
+			state.MoveCursorToLineAbove(s, 1)
+		}
+
+		EnterInsertMode(s)
+	}
+}
+
+func ChangeAngleBlock(includeAngleBrackets bool, clipboardPage clipboard.PageId) Action {
+	return func(s *state.EditorState) {
+		startPos, endPos := state.DeleteRange(s, func(params state.LocatorParams) (uint64, uint64) {
+			return locate.DelimitedBlock(locate.AnglePair, params.TextTree, params.SyntaxParser, includeAngleBrackets, params.CursorPos)
+		}, clipboardPage)
+
+		if startPos == endPos {
+			// Not within a paren block.
+			return
+		}
+
+		EnterInsertMode(s)
+	}
 }
 
 func EnterInsertMode(s *state.EditorState) {
@@ -441,10 +530,10 @@ func DeleteToStartOfLineNonWhitespace(clipboardPage clipboard.PageId) Action {
 	}
 }
 
-func DeleteToStartOfNextWord(count uint64, clipboardPage clipboard.PageId) Action {
+func DeleteToStartOfNextWord(count uint64, clipboardPage clipboard.PageId, withPunctuation bool) Action {
 	return func(s *state.EditorState) {
 		state.DeleteToPos(s, func(params state.LocatorParams) uint64 {
-			endPos := locate.NextWordStart(params.TextTree, params.CursorPos, count, true)
+			endPos := locate.NextWordStart(params.TextTree, params.CursorPos, count, withPunctuation, true)
 			if endPos == params.CursorPos {
 				// The cursor didn't move, so we're on an empty line.
 				// Attempt to delete the newline at the end of the line.
@@ -555,11 +644,11 @@ func OutdentLine(count uint64) Action {
 	}
 }
 
-func CopyToStartOfNextWord(count uint64, clipboardPage clipboard.PageId) Action {
+func CopyToStartOfNextWord(count uint64, clipboardPage clipboard.PageId, withPunctuation bool) Action {
 	return func(s *state.EditorState) {
 		state.CopyRange(s, clipboardPage, func(params state.LocatorParams) (uint64, uint64) {
 			startPos := params.CursorPos
-			endPos := locate.NextWordStart(params.TextTree, params.CursorPos, count, true)
+			endPos := locate.NextWordStart(params.TextTree, params.CursorPos, count, withPunctuation, true)
 			return startPos, endPos
 		})
 	}
@@ -754,6 +843,46 @@ func CopySelectionAndReturnToNormalMode(clipboardPage clipboard.PageId) Action {
 	return func(s *state.EditorState) {
 		state.CopySelection(s, clipboardPage)
 		ReturnToNormalMode(s)
+	}
+}
+
+func SelectInnerWord(count uint64) Action {
+	return func(s *state.EditorState) {
+		state.SelectRange(s, func(params state.LocatorParams) (uint64, uint64) {
+			return locate.InnerWordObject(params.TextTree, params.CursorPos, count)
+		})
+	}
+}
+
+func SelectAWord(count uint64) Action {
+	return func(s *state.EditorState) {
+		state.SelectRange(s, func(params state.LocatorParams) (uint64, uint64) {
+			return locate.WordObject(params.TextTree, params.CursorPos, count)
+		})
+	}
+}
+
+func SelectParenBlock(includeParens bool) Action {
+	return func(s *state.EditorState) {
+		state.SelectRange(s, func(params state.LocatorParams) (uint64, uint64) {
+			return locate.DelimitedBlock(locate.ParenPair, params.TextTree, params.SyntaxParser, includeParens, params.CursorPos)
+		})
+	}
+}
+
+func SelectBraceBlock(includeBraces bool) Action {
+	return func(s *state.EditorState) {
+		state.SelectRange(s, func(params state.LocatorParams) (uint64, uint64) {
+			return locate.DelimitedBlock(locate.BracePair, params.TextTree, params.SyntaxParser, includeBraces, params.CursorPos)
+		})
+	}
+}
+
+func SelectAngleBlock(includeAngleBrackets bool) Action {
+	return func(s *state.EditorState) {
+		state.SelectRange(s, func(params state.LocatorParams) (uint64, uint64) {
+			return locate.DelimitedBlock(locate.AnglePair, params.TextTree, params.SyntaxParser, includeAngleBrackets, params.CursorPos)
+		})
 	}
 }
 
