@@ -1,4 +1,4 @@
-package fuzz
+package fuzzAretext
 
 import "strconv"
 import "github.com/aretext/aretext/text"
