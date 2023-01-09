@@ -61,9 +61,9 @@ func cursorCommands() []Command {
 			},
 		},
 		{
-			Name: "cursor right (right arrow or l)",
+			Name: "cursor right (right arrow or l or space)",
 			BuildExpr: func() vm.Expr {
-				return verbCountThenExpr(altExpr(keyExpr(tcell.KeyRight), runeExpr('l')))
+				return verbCountThenExpr(altExpr(keyExpr(tcell.KeyRight), runeExpr('l'), runeExpr(' ')))
 			},
 			BuildAction: func(ctx Context, p CommandParams) Action {
 				return decorate(CursorRight(p.Count))
@@ -79,12 +79,21 @@ func cursorCommands() []Command {
 			},
 		},
 		{
-			Name: "cursor down (down arrow or j)",
+			Name: "cursor down (down arrow, j)",
 			BuildExpr: func() vm.Expr {
 				return verbCountThenExpr(altExpr(keyExpr(tcell.KeyDown), runeExpr('j')))
 			},
 			BuildAction: func(ctx Context, p CommandParams) Action {
 				return decorate(CursorDown(p.Count))
+			},
+		},
+		{
+			Name: "first non-whitespace of next line (enter)",
+			BuildExpr: func() vm.Expr {
+				return verbCountThenExpr(keyExpr(tcell.KeyEnter))
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorate(CursorNextLine(p.Count))
 			},
 		},
 		{
@@ -102,7 +111,7 @@ func cursorCommands() []Command {
 				return cmdExpr("w", "", captureOpts{count: true})
 			},
 			BuildAction: func(ctx Context, p CommandParams) Action {
-				return decorate(CursorNextWordStart(p.Count))
+				return decorate(CursorNextWordStart(p.Count, false))
 			},
 		},
 		{
@@ -111,7 +120,25 @@ func cursorCommands() []Command {
 				return cmdExpr("b", "", captureOpts{count: true})
 			},
 			BuildAction: func(ctx Context, p CommandParams) Action {
-				return decorate(CursorPrevWordStart(p.Count))
+				return decorate(CursorPrevWordStart(p.Count, false))
+			},
+		},
+		{
+			Name: "cursor next word start - words can contain puctuation (W)",
+			BuildExpr: func() vm.Expr {
+				return cmdExpr("W", "", captureOpts{count: true})
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorate(CursorNextWordStart(p.Count, true))
+			},
+		},
+		{
+			Name: "cursor prev word start - words can contain puctuation (B)",
+			BuildExpr: func() vm.Expr {
+				return cmdExpr("B", "", captureOpts{count: true})
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorate(CursorPrevWordStart(p.Count, true))
 			},
 		},
 		{
@@ -120,7 +147,16 @@ func cursorCommands() []Command {
 				return cmdExpr("e", "", captureOpts{count: true})
 			},
 			BuildAction: func(ctx Context, p CommandParams) Action {
-				return decorate(CursorNextWordEnd(p.Count))
+				return decorate(CursorNextWordEnd(p.Count, false))
+			},
+		},
+		{
+			Name: "cursor next word end - words can contain punctuation (E)",
+			BuildExpr: func() vm.Expr {
+				return cmdExpr("E", "", captureOpts{count: true})
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorate(CursorNextWordEnd(p.Count, true))
 			},
 		},
 		{
@@ -280,7 +316,25 @@ func cursorCommands() []Command {
 				return keyExpr(tcell.KeyCtrlU)
 			},
 			BuildAction: func(ctx Context, p CommandParams) Action {
-				return decorate(ScrollUp(ctx))
+				return decorate(ScrollUp(ctx, true))
+			},
+		},
+		{
+			Name: "scroll forward (ctrl-f)",
+			BuildExpr: func() vm.Expr {
+				return keyExpr(tcell.KeyCtrlF)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorate(ScrollDown(ctx, false))
+			},
+		},
+		{
+			Name: "scroll back (ctrl-b)",
+			BuildExpr: func() vm.Expr {
+				return keyExpr(tcell.KeyCtrlB)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorate(ScrollUp(ctx, false))
 			},
 		},
 		{
@@ -289,7 +343,7 @@ func cursorCommands() []Command {
 				return keyExpr(tcell.KeyCtrlD)
 			},
 			BuildAction: func(ctx Context, p CommandParams) Action {
-				return decorate(ScrollDown(ctx))
+				return decorate(ScrollDown(ctx, true))
 			},
 		},
 	}
@@ -560,7 +614,18 @@ func NormalModeCommands() []Command {
 			},
 			BuildAction: func(ctx Context, p CommandParams) Action {
 				return decorateNormalOrVisual(
-					DeleteToStartOfNextWord(p.Count, p.ClipboardPage),
+					DeleteToStartOfNextWord(p.Count, p.ClipboardPage, false),
+					addToMacro{lastAction: true, user: true})
+			},
+		},
+		{
+			Name: "delete to start of next word - words can contain punctuation (dW)",
+			BuildExpr: func() vm.Expr {
+				return cmdExpr("d", "W", captureOpts{count: true, clipboardPage: true})
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					DeleteToStartOfNextWord(p.Count, p.ClipboardPage, true),
 					addToMacro{lastAction: true, user: true})
 			},
 		},
@@ -583,6 +648,94 @@ func NormalModeCommands() []Command {
 			BuildAction: func(ctx Context, p CommandParams) Action {
 				return decorateNormalOrVisual(
 					DeleteInnerWord(p.Count, p.ClipboardPage),
+					addToMacro{lastAction: true, user: true})
+			},
+		},
+		{
+			Name: "delete inner paren block (dib)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("d", "ib", captureOpts{clipboardPage: true}),
+					cmdExpr("d", "i(", captureOpts{clipboardPage: true}),
+					cmdExpr("d", "i)", captureOpts{clipboardPage: true}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					DeleteParenBlock(false, p.ClipboardPage),
+					addToMacro{lastAction: true, user: true})
+			},
+		},
+		{
+			Name: "delete a paren block (dab)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("d", "ab", captureOpts{clipboardPage: true}),
+					cmdExpr("d", "a(", captureOpts{clipboardPage: true}),
+					cmdExpr("d", "a)", captureOpts{clipboardPage: true}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					DeleteParenBlock(true, p.ClipboardPage),
+					addToMacro{lastAction: true, user: true})
+			},
+		},
+		{
+			Name: "delete inner brace block (diB)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("d", "iB", captureOpts{clipboardPage: true}),
+					cmdExpr("d", "i{", captureOpts{clipboardPage: true}),
+					cmdExpr("d", "i}", captureOpts{clipboardPage: true}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					DeleteBraceBlock(false, p.ClipboardPage),
+					addToMacro{lastAction: true, user: true})
+			},
+		},
+		{
+			Name: "delete a brace block (daB)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("d", "aB", captureOpts{clipboardPage: true}),
+					cmdExpr("d", "a{", captureOpts{clipboardPage: true}),
+					cmdExpr("d", "a}", captureOpts{clipboardPage: true}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					DeleteBraceBlock(true, p.ClipboardPage),
+					addToMacro{lastAction: true, user: true})
+			},
+		},
+		{
+			Name: "delete inner angle block (di<)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("d", "i<", captureOpts{clipboardPage: true}),
+					cmdExpr("d", "i>", captureOpts{clipboardPage: true}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					DeleteAngleBlock(false, p.ClipboardPage),
+					addToMacro{lastAction: true, user: true})
+			},
+		},
+		{
+			Name: "delete an angle block block (da<)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("d", "a<", captureOpts{clipboardPage: true}),
+					cmdExpr("d", "a>", captureOpts{clipboardPage: true}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					DeleteAngleBlock(true, p.ClipboardPage),
 					addToMacro{lastAction: true, user: true})
 			},
 		},
@@ -668,6 +821,94 @@ func NormalModeCommands() []Command {
 			},
 		},
 		{
+			Name: "change inner paren block (cib)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("c", "ib", captureOpts{clipboardPage: true}),
+					cmdExpr("c", "i(", captureOpts{clipboardPage: true}),
+					cmdExpr("c", "i)", captureOpts{clipboardPage: true}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					ChangeParenBlock(false, p.ClipboardPage),
+					addToMacro{lastAction: true, user: true})
+			},
+		},
+		{
+			Name: "change a paren block (cab)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("c", "ab", captureOpts{clipboardPage: true}),
+					cmdExpr("c", "a(", captureOpts{clipboardPage: true}),
+					cmdExpr("c", "a)", captureOpts{clipboardPage: true}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					ChangeParenBlock(true, p.ClipboardPage),
+					addToMacro{lastAction: true, user: true})
+			},
+		},
+		{
+			Name: "change inner brace block (ciB)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("c", "iB", captureOpts{clipboardPage: true}),
+					cmdExpr("c", "i{", captureOpts{clipboardPage: true}),
+					cmdExpr("c", "i}", captureOpts{clipboardPage: true}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					ChangeBraceBlock(false, p.ClipboardPage),
+					addToMacro{lastAction: true, user: true})
+			},
+		},
+		{
+			Name: "change a brace block (caB)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("c", "aB", captureOpts{clipboardPage: true}),
+					cmdExpr("c", "a{", captureOpts{clipboardPage: true}),
+					cmdExpr("c", "a}", captureOpts{clipboardPage: true}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					ChangeBraceBlock(true, p.ClipboardPage),
+					addToMacro{lastAction: true, user: true})
+			},
+		},
+		{
+			Name: "change inner angle block (ci<)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("c", "i<", captureOpts{clipboardPage: true}),
+					cmdExpr("c", "i>", captureOpts{clipboardPage: true}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					ChangeAngleBlock(false, p.ClipboardPage),
+					addToMacro{lastAction: true, user: true})
+			},
+		},
+		{
+			Name: "change an angle block (ca<)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("c", "a<", captureOpts{clipboardPage: true}),
+					cmdExpr("c", "a>", captureOpts{clipboardPage: true}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					ChangeAngleBlock(true, p.ClipboardPage),
+					addToMacro{lastAction: true, user: true})
+			},
+		},
+		{
 			Name: "replace character (r)",
 			BuildExpr: func() vm.Expr {
 				return cmdExpr("r", "", captureOpts{replaceChar: true})
@@ -720,7 +961,18 @@ func NormalModeCommands() []Command {
 			},
 			BuildAction: func(ctx Context, p CommandParams) Action {
 				return decorateNormalOrVisual(
-					CopyToStartOfNextWord(p.Count, p.ClipboardPage),
+					CopyToStartOfNextWord(p.Count, p.ClipboardPage, false),
+					addToMacro{lastAction: true, user: true})
+			},
+		},
+		{
+			Name: "yank to start of next word - words can contain punctuation (yW)",
+			BuildExpr: func() vm.Expr {
+				return cmdExpr("y", "W", captureOpts{count: true, clipboardPage: true})
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					CopyToStartOfNextWord(p.Count, p.ClipboardPage, true),
 					addToMacro{lastAction: true, user: true})
 			},
 		},
@@ -1038,6 +1290,116 @@ func VisualModeCommands() []Command {
 					addToMacro{user: true})
 			},
 		},
+		{
+			Name: "select inner word (iw)",
+			BuildExpr: func() vm.Expr {
+				return cmdExpr("iw", "", captureOpts{count: true})
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					SelectInnerWord(p.Count),
+					addToMacro{user: true})
+			},
+		},
+		{
+			Name: "select a word (aw)",
+			BuildExpr: func() vm.Expr {
+				return cmdExpr("aw", "", captureOpts{count: true})
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					SelectAWord(p.Count),
+					addToMacro{user: true})
+			},
+		},
+		{
+			Name: "select inner paren block (ib)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("ib", "", captureOpts{}),
+					cmdExpr("i(", "", captureOpts{}),
+					cmdExpr("i)", "", captureOpts{}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					SelectParenBlock(false),
+					addToMacro{user: true})
+			},
+		},
+		{
+			Name: "select a paren block (ab)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("ab", "", captureOpts{}),
+					cmdExpr("a(", "", captureOpts{}),
+					cmdExpr("a)", "", captureOpts{}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					SelectParenBlock(true),
+					addToMacro{user: true})
+			},
+		},
+		{
+			Name: "select inner brace block (iB)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("iB", "", captureOpts{}),
+					cmdExpr("i{", "", captureOpts{}),
+					cmdExpr("i}", "", captureOpts{}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					SelectBraceBlock(false),
+					addToMacro{user: true})
+			},
+		},
+		{
+			Name: "select a brace block (aB)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("aB", "", captureOpts{}),
+					cmdExpr("a{", "", captureOpts{}),
+					cmdExpr("a}", "", captureOpts{}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					SelectBraceBlock(true),
+					addToMacro{user: true})
+			},
+		},
+		{
+			Name: "select inner angle block (i<)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("i<", "", captureOpts{}),
+					cmdExpr("i>", "", captureOpts{}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					SelectAngleBlock(false),
+					addToMacro{user: true})
+			},
+		},
+		{
+			Name: "select an angle block (a<)",
+			BuildExpr: func() vm.Expr {
+				return altExpr(
+					cmdExpr("a<", "", captureOpts{}),
+					cmdExpr("a>", "", captureOpts{}),
+				)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorateNormalOrVisual(
+					SelectAngleBlock(true),
+					addToMacro{user: true})
+			},
+		},
 	}...)
 }
 
@@ -1242,6 +1604,24 @@ func SearchModeCommands() []Command {
 			BuildAction: func(ctx Context, p CommandParams) Action {
 				// This returns the input mode to normal if the search query is empty.
 				return decorate(DeleteRuneFromSearchQuery)
+			},
+		},
+		{
+			Name: "previous search query in history",
+			BuildExpr: func() vm.Expr {
+				return keyExpr(tcell.KeyUp)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorate(state.SetSearchQueryToPrevInHistory)
+			},
+		},
+		{
+			Name: "next search query in history",
+			BuildExpr: func() vm.Expr {
+				return keyExpr(tcell.KeyDown)
+			},
+			BuildAction: func(ctx Context, p CommandParams) Action {
+				return decorate(state.SetSearchQueryToNextInHistory)
 			},
 		},
 	}
